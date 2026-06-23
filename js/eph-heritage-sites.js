@@ -17,23 +17,23 @@ function formatWikidataDate(dateString, precision) {
   const bulanIndo = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   let prec = parseInt(precision) || 9; // Default ke presisi tahunan (9)
   if (prec === 11) {
-    // Presisi Hari (Contoh: 1 Januari 2007)
+    // Presisi Hari
     return `${parseInt(dayStr)} ${bulanIndo[parseInt(monthStr)]} ${yearStr}`;
   } 
   else if (prec === 10) {
-    // Presisi Bulan (Contoh: Januari 2007)
+    // Presisi Bulan
     return `${bulanIndo[parseInt(monthStr)]} ${yearStr}`;
   } 
   else if (prec === 9) {
-    // Presisi Tahun (Contoh: 2007)
+    // Presisi Tahun
     return yearStr;
   } 
   else if (prec === 8) {
-    // Presisi Dekade (Contoh: 1980-an)
+    // Presisi Dekade
     return `${yearStr}-an`;
   } 
   else if (prec === 7) {
-    // Presisi Abad (Contoh: Abad ke-20)
+    // Presisi Abad
     let century = Math.ceil(yearNum / 100);
     return `abad ke-${century}`;
   } 
@@ -41,13 +41,14 @@ function formatWikidataDate(dateString, precision) {
     return yearStr;
   }
 }
+
 // ============================================================
 // FUNGSI UTAMA (DIOPTIMALKAN)
 // ============================================================
 function loadPrimaryData() {
   doPreProcessing();
 
-  populateDesignationTypesData()
+  populateProvinceTypesData() // BERUBAH: Dulu populateDesignationTypesData
     .then(() => {
       return populateCoordinatesData().then(populateMapAndIndex);
     })
@@ -56,15 +57,14 @@ function loadPrimaryData() {
       populateImageAndWikipediaData()
         .then(() => {
           applyIntersectionFilter(true);
-          // KUNCI PERBAIKAN: Hapus ingatan panel yang telanjur terbuat kosong
+          // Hapus ingatan panel yang telanjur terbuat kosong
           Object.values(Records).forEach(r => r.panelElem = undefined);          
-          // Perintahkan aplikasi untuk membaca ulang URL dan merender ulang panel dengan data baru
+          // Perintahkan aplikasi untuk membaca ulang URL
           processHashChange();
         })
         .catch(error => {
           console.warn("Gagal mengambil data Gambar/Wikipedia dari server.", error);
           applyIntersectionFilter(true);                
-          // Tetap hapus ingatan dan render ulang sebagai cadangan jika terjadi error
           Object.values(Records).forEach(r => r.panelElem = undefined);
           processHashChange();
         });
@@ -74,13 +74,17 @@ function loadPrimaryData() {
        alert("Maaf, server database sedang sibuk. Coba lagi nanti.");
     });
 }
+
 function doPreProcessing() {
   let anchorElem = document.getElementById('wdqs-link');
   anchorElem.href = 'https://query.wikidata.org/#' + encodeURIComponent(ABOUT_SPARQL_QUERY);
   processHashChange();
 }
 
-function populateDesignationTypesData() {
+// ============================================================
+// KODE BARU: PEMBENTUKAN KELOMPOK PROVINSI OTOMATIS
+// ============================================================
+function populateProvinceTypesData() {
   return queryWdqsThenProcess(
     SPARQL_QUERY_0,
     function(result) {
@@ -96,38 +100,46 @@ function populateDesignationTypesData() {
         record.title = '[ERROR: No title]';
       }
 
-      let designationQid = result.designationQid.value;
-      if ('partOf' in DESIGNATION_TYPES[designationQid]) {
-        designationQid = DESIGNATION_TYPES[designationQid].partOf;
+      // === LOGIKA DINAMIS PROVINSI ===
+      let provQid = result.provinsiQid.value;
+      let provLabel = result.provinsiLabel.value;
+
+      // 1. Daftarkan provinsi baru ke kamus global jika belum ada
+      if (!(provQid in ProvinceIndex)) {
+        ProvinceIndex[provQid] = new ProvinceIndexEntry();
+        ProvinceIndex[provQid].name = provLabel; // Simpan namanya
       }
-      if (!(designationQid in record.designations)) {
-        record.designations[designationQid] = new Designation();
+
+      // 2. Tandai bahwa bangunan ini masuk ke provinsi tersebut
+      if (!(provQid in record.designations)) {
+        record.designations[provQid] = provLabel; 
       }
       
-if ('p131LokasiLabel' in result && result.p131LokasiLabel.value) {
+      // 3. Stempel tag wilayah untuk mesin filter
+      record.areaTags.add(provQid);
+      
+      if ('p131LokasiLabel' in result && result.p131LokasiLabel.value) {
         record.lokasiSpesifik = result.p131LokasiLabel.value;
       }
       if ('p131Image' in result && result.p131Image.value) {
         record.lokasiImage = extractImageFilename(result.p131Image);
       }
+      
       // LOGIKA TAHUN BERDIRI (P571) & PRESISI
-if (!record.tahunBerdiri && result.tahunBerdiriMentah && result.tahunBerdiriMentah.value) {
+      if (!record.tahunBerdiri && result.tahunBerdiriMentah && result.tahunBerdiriMentah.value) {
         let precision = result.tahunPresisi ? result.tahunPresisi.value : 9;
         record.tahunBerdiri = formatWikidataDate(result.tahunBerdiriMentah.value, precision);        
-        // KODE BARU: Simpan string waktu mentah (ISO) untuk keperluan sorting usia
-        // (Pastikan baris ini berada DI DALAM kurung kurawal 'if')
         record.rawTahunBerdiri = result.tahunBerdiriMentah.value.replace(/^[+-]/, '');
       }
 
-// === KODE BARU: LOGIKA KLASTER MASJID PENTING (DIOPTIMALKAN) ===
-      // Langsung tangkap kesimpulan dari server Wikidata
+      // LOGIKA KLASTER MASJID PENTING
       let statusKlaster = result.isKlasterPenting ? result.isKlasterPenting.value : "false";      
       if (statusKlaster === "true") {
         record.masukKlasterPenting = true;
       }
     },
     function() {
-      populateDesignationIndex();
+      populateProvinceIndex(); // Panggil fungsi penghitung total yang baru
       SparqlValuesClause = 'VALUES ?site {' + Object.keys(Records).map(qid => `wd:${qid}`).join(' ') + '}';
       Object.values(Records).forEach(record => { record.indexTitle = record.title });
     },
@@ -165,16 +177,13 @@ function populateImageAndWikipediaData() {
     },
   );
 }
-// ====================================================================
-// FUNGSI JARING 3: Mengambil Peristiwa Penting Saat Diklik (Fase 5)
-// ====================================================================
+
 function populateImportantEventsData(qid) {
   let record = Records[qid];
   let queryStr = getSparqlQuery4(qid);
 
   record.events = []; 
 
-  // TAMBAHAN: Daftar whitelist peristiwa yang diizinkan tampil
   const ALLOWED_EVENTS = [
     'konstruksi', 
     'dibuka untuk umum', 
@@ -189,16 +198,12 @@ function populateImportantEventsData(qid) {
       if ('eventLabel' in result && result.eventLabel.value) {
         let labelKecil = result.eventLabel.value.toLowerCase();
         
-        // TAMBAHAN: Filter, hanya proses jika label masuk dalam ALLOWED_EVENTS
         if (ALLOWED_EVENTS.includes(labelKecil)) {
-          
-          // TAMBAHAN: Ambil data tahun mentah (untuk cadangan pengurutan jika ada 2 peristiwa sejenis)
           let rawDateStr = (result.pointInTime ? result.pointInTime.value : null) || 
                            (result.startTime ? result.startTime.value : null) || 
                            (result.endTime ? result.endTime.value : null);
           let extractYear = rawDateStr ? parseInt(rawDateStr.match(/([+-]?\d{4,})/)[0]) : 9999;
 
-          // TAMBAHAN: Masukkan sortYear ke dalam objek
           let eventObj = { label: result.eventLabel.value, time: '', sortYear: extractYear };
           
           let pt = result.pointInTime ? formatWikidataDate(result.pointInTime.value, result.ptPrecision ? result.ptPrecision.value : 9) : null;
@@ -210,9 +215,9 @@ function populateImportantEventsData(qid) {
           } else if (st && et) {
             eventObj.time = `${st}–${et}`;
           } else if (st) {
-eventObj.time = `${st} (dimulai)`; // Mengubah format mulai
+            eventObj.time = `${st} (dimulai)`; 
           } else if (et) {
-eventObj.time = `${et} (diselesaikan)`; // Mengubah format selesai
+            eventObj.time = `${et} (diselesaikan)`; 
           }
 
           let isDuplicate = record.events.some(e => e.label === eventObj.label && e.time === eventObj.time);
@@ -220,21 +225,16 @@ eventObj.time = `${et} (diselesaikan)`; // Mengubah format selesai
         }
       }
     },
-function() {
-      // Alih-alih merender, kita lanjutkan tarik data Status & Kapasitas
+    function() {
       populateStatusAndCapacityData(qid); 
     }
   );
 }
 
-// ====================================================================
-// FUNGSI JARING 4: Mengambil Status & Kapasitas (Berantai)
-// ====================================================================
 function populateStatusAndCapacityData(qid) {
   let record = Records[qid];
-  let queryStr = getSparqlQuery6(qid); // Memanggil kueri yang mengambil P5817 & P1083
+  let queryStr = getSparqlQuery6(qid); 
 
-  // Siapkan penampung kosong
   record.kondisi = null;
   record.kapasitas = null;
 
@@ -249,27 +249,21 @@ function populateStatusAndCapacityData(qid) {
       }
     },
     function() {
-      // Setelah semua data (Peristiwa, Kondisi, Kapasitas) terkumpul, RENDER!
       renderDynamicDataInPanel(qid); 
     }
   );
 }
 
-// ====================================================================
-// FUNGSI RENDER: Menyuntikkan Peristiwa, Status, & Kapasitas
-// ====================================================================
 function renderDynamicDataInPanel(qid) {
   let record = Records[qid];
   
   if (!record.panelElem) return;
-  // Kita tetap menggunakan ID container events sebagai patokan loader
   let container = record.panelElem.querySelector(`#events-container-${qid}`);
   if (!container) return; 
 
-let html = '';
+  let html = '';
   let wikiBaseUrl = `https://www.wikidata.org/wiki/${qid}`;
 
-  // --- URUTAN 1: PERISTIWA PENTING ---
   if (record.events && record.events.length > 0) {
     const EVENT_ORDER = {
       'konstruksi': 1, 'dibuka untuk umum': 2,
@@ -278,13 +272,9 @@ let html = '';
     };
 
     record.events.sort((a, b) => {
-      // 1. Prioritaskan pengurutan berdasarkan TAHUN (Kronologis)
       if (a.sortYear !== b.sortYear) {
         return a.sortYear - b.sortYear;
       }
-      
-      // 2. JIKA tahunnya kebetulan sama persis (pemecah seri), 
-      // barulah urutkan berdasarkan hierarki jenis peristiwa
       let orderA = EVENT_ORDER[a.label.toLowerCase()] || 99;
       let orderB = EVENT_ORDER[b.label.toLowerCase()] || 99;
       return orderA - orderB;
@@ -293,53 +283,41 @@ let html = '';
     record.events.forEach(ev => {
       let capLabel = ev.label.charAt(0).toUpperCase() + ev.label.slice(1);
       let timeText = ev.time ? ev.time : ''; 
-      
-      // Ikon sunting telah dihapus, hanya menyisakan teks murni
       html += `<p>${capLabel}: ${timeText}</p>`;
     });
   }
 
-  // --- URUTAN 2: STATUS (KONDISI - P5817) ---
   if (record.kondisi) {
     let kondisiKecil = record.kondisi.toLowerCase();
-    
-    // Ikon sunting telah dihapus
     html += `<p>Kondisi: ${kondisiKecil}</p>`;
   }
 
-  // --- URUTAN 3: KAPASITAS JEMAAH (P1083) ---
   if (record.kapasitas) {
     let formatAngka = parseInt(record.kapasitas).toLocaleString('id-ID');
-    
-    // Ikon sunting telah dihapus
     html += `<p>Kapasitas: ${formatAngka} jemaah</p>`;
   }
 
-  // --- URUTAN 4: TAUTAN TAMBAHKAN DATA LAINNYA (Tampil Default) ---
   let tautanTambah = `<p><a href="${wikiBaseUrl}" target="_blank" class="sunting-linktambah" title="Tambahkan data di Wikidata" style="font-style: italic;">Lengkapi data di Wikidata!</a></p>`;
   html += tautanTambah;
 
-  // --- EKSEKUSI RENDER & HAPUS LOADER ---
   container.insertAdjacentHTML('beforebegin', html);
   container.remove();
 }
 
-function populateDesignationIndex() {
-  DesignationIndex = { all: new DesignationIndexEntry };
-  Object.keys(DESIGNATION_TYPES)
-    .filter(qid => !('partOf' in DESIGNATION_TYPES[qid]))
-    .forEach(qid => {
-      DesignationIndex[qid] = new DesignationIndexEntry;
-      let orgId = DESIGNATION_TYPES[qid].org;
-      if (!(orgId in DesignationIndex)) DesignationIndex[orgId] = new DesignationIndexEntry;
-    });
+// ============================================================
+// KODE BARU: MENGHITUNG TOTAL MASJID PER PROVINSI
+// ============================================================
+function populateProvinceIndex() {
+  // Pastikan indeks induk ada
+  if (!ProvinceIndex['all']) ProvinceIndex['all'] = new ProvinceIndexEntry();
 
   Object.values(Records).forEach(record => {
-    DesignationIndex.all.total++;
-    Object.keys(record.designations).forEach(typeQid => {
-      let orgId = DESIGNATION_TYPES[typeQid].org;
-      DesignationIndex[typeQid].total++;
-      DesignationIndex[orgId  ].total++;
+    ProvinceIndex['all'].total++;
+    // Tambahkan jumlah ke setiap provinsi tempat masjid ini berada
+    Object.keys(record.designations).forEach(provQid => {
+      if (ProvinceIndex[provQid]) {
+        ProvinceIndex[provQid].total++;
+      }
     });
   });
 }
@@ -366,32 +344,29 @@ function populateMapAndIndex() {
     record.indexLi = li;
   });
   Cluster.addLayers(mapMarkers);
-  populateDesignationIndexNodes();
+  populateProvinceIndexNodes(); // Panggil fungsi distribusi node yang baru
   generateFilterSelect();
 }
 
-function populateDesignationIndexNodes() {
+// ============================================================
+// KODE BARU: MENYUNTIKKAN DATA MARKER & DAFTAR KE INDEKS PROVINSI
+// ============================================================
+function populateProvinceIndexNodes() {
   Object.values(Records).forEach(record => {
-    if (record.mapMarker) DesignationIndex.all.mapMarkers.push(record.mapMarker);
-    DesignationIndex.all.indexLis.push(record.indexLi);
+    if (record.mapMarker) ProvinceIndex['all'].mapMarkers.push(record.mapMarker);
+    ProvinceIndex['all'].indexLis.push(record.indexLi);
     
-    Object.keys(record.designations).forEach(typeQid => {
-      let orgId = DESIGNATION_TYPES[typeQid].org;
-      
-      // KODE BARU: Memberikan stempel tag wilayah ke setiap record
-      record.areaTags.add(typeQid);
-      record.areaTags.add(orgId);
-
-      if (record.mapMarker) {
-        DesignationIndex[typeQid].mapMarkers.push(record.mapMarker);
-        DesignationIndex[orgId  ].mapMarkers.push(record.mapMarker);
+    Object.keys(record.designations).forEach(provQid => {
+      if (record.mapMarker && ProvinceIndex[provQid]) {
+        ProvinceIndex[provQid].mapMarkers.push(record.mapMarker);
       }
-      DesignationIndex[typeQid].indexLis.push(record.indexLi);
-      DesignationIndex[orgId  ].indexLis.push(record.indexLi);
+      if (ProvinceIndex[provQid]) {
+        ProvinceIndex[provQid].indexLis.push(record.indexLi);
+      }
     });
   });
   
-  Object.values(DesignationIndex).forEach(indexItem => {
+  Object.values(ProvinceIndex).forEach(indexItem => {
     indexItem.indexLis = indexItem.indexLis
       .map(li => [li, li.textContent])
       .sort((a, b) => a[1] > b[1] ? 1 : -1)
@@ -399,7 +374,6 @@ function populateDesignationIndexNodes() {
   });
 }
 
-// Variabel State Global
 let currentRegionFilter = 'all';
 let currentUsiaFilter = 'all';
 let activeFeatures = new Set(); 
@@ -409,24 +383,22 @@ function generateFilterSelect() {
   let selectRegion = document.getElementById('filter-region');
   let selectSort = document.getElementById('sort-order');
 
- 
-  // 1. Bangun Master Dropdown (Wilayah)
-  selectRegion.innerHTML = `<option value="all">Semua Wilayah – ${DesignationIndex.all.total}</option>`;
+  // 1. Bangun Master Dropdown (Provinsi Dinamis)
+  selectRegion.innerHTML = `<option value="all">Semua Wilayah – ${ProvinceIndex['all'].total}</option>`;
   
-  Object.keys(DESIGNATION_TYPES)
-    .filter(qid => !('partOf' in DESIGNATION_TYPES[qid]))
-    .map(qid => [qid, DESIGNATION_TYPES[qid].order]) 
-    .sort((a, b) => a[1] - b[1])
-    .map(item => item[0])
-    .forEach(qid => {
-      let type = DESIGNATION_TYPES[qid];
+  // Ambil data dari object, abaikan 'all', jadikan array, lalu urut abjad
+  Object.keys(ProvinceIndex)
+    .filter(qid => qid !== 'all')
+    .map(qid => { return { qid: qid, name: ProvinceIndex[qid].name, total: ProvinceIndex[qid].total }; })
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach(prov => {
       let option = document.createElement('option');
-      option.value = qid;
-      option.textContent = `${type.name} – ${DesignationIndex[qid].total}`;
+      option.value = prov.qid;
+      option.textContent = `${prov.name} – ${prov.total}`;
       selectRegion.appendChild(option);
     });
 
-applyIntersectionFilter(true);
+  applyIntersectionFilter(true);
   
   // 2. Event Listener Wilayah
   selectRegion.addEventListener('change', function() {
@@ -434,59 +406,42 @@ applyIntersectionFilter(true);
     applyIntersectionFilter();
   });
 
-  // =======================================================
-  // KODE BARU: Pengendali Dropdown Kombinasi (Sort + Filter)
-  // =======================================================
-let selectKombinasi = document.getElementById('filter-sort-kombinasi');
+  let selectKombinasi = document.getElementById('filter-sort-kombinasi');
   if (selectKombinasi) {
     selectKombinasi.addEventListener('change', function() {
       let pilihan = this.value;
-
-      // 1. Reset variabel ke kondisi bawaan
       currentUsiaFilter = 'all';
 
-      // 2. Tentukan aksi berdasarkan opsi yang dipilih
       if (pilihan === 'filter-usia-50') {
         currentUsiaFilter = 'usia_50'; 
       } 
       else if (pilihan === 'filter-klaster') {
         currentUsiaFilter = 'klaster_penting';
       }
-      else if (pilihan === 'default') {
-        // Biarkan saja, otomatis kembali ke semua data dan urut abjad
-      }
-      // 3. Eksekusi ulang tampilan
       applyIntersectionFilter();
     });
   }
-  // =======================================================
 
-  // 4. Event Listener Tombol Fitur Toggle
   let btnAll = document.getElementById('btn-all');
   let featButtons = document.querySelectorAll('.feat-btn:not(#btn-all)');
 
-btnAll.addEventListener('click', function() {
-    // 1. Reset Tombol Fitur (Gambar & Artikel)
+  btnAll.addEventListener('click', function() {
     activeFeatures.clear();
     btnAll.classList.add('active');
     featButtons.forEach(b => b.classList.remove('active'));
 
-    // 2. Reset Dropdown Wilayah
     currentRegionFilter = 'all';
     let selectRegion = document.getElementById('filter-region');
     if (selectRegion) selectRegion.value = 'all';
 
-    // 3. Reset Dropdown Kombinasi (Usia & Klaster)
     currentUsiaFilter = 'all';
     let selectKombinasi = document.getElementById('filter-sort-kombinasi');
     if (selectKombinasi) selectKombinasi.value = 'default';
 
-    // 4. Reset Kotak Pencarian Teks
     currentSearchQuery = '';
     let searchInput = document.getElementById('search-input');
     if (searchInput) searchInput.value = '';
 
-    // 5. Terapkan ulang filter dengan kondisi bersih
     applyIntersectionFilter();
   });
 
@@ -515,34 +470,26 @@ btnAll.addEventListener('click', function() {
   let searchInput = document.getElementById('search-input');
   if (searchInput) {
     searchInput.addEventListener('input', function() {
-      // Simpan teks menjadi huruf kecil semua agar pencarian tidak sensitif huruf besar/kecil
       currentSearchQuery = this.value.toLowerCase();
-      applyIntersectionFilter(); // Terapkan filter dan perbarui peta/daftar
+      applyIntersectionFilter(); 
     });
   }
 }
 
-// Sekarang fungsi ini wajib menerima "kiriman" angka dari luar (variabel totalValidRecords)
 function updateFeatureCounts(totalValidRecords) {
-  
   let btnAll = document.getElementById('btn-all');
   let btnImg = document.getElementById('btn-image') || document.querySelector('[data-filter="image"]');
   let btnArt = document.getElementById('btn-article') || document.querySelector('[data-filter="article"]');
-
-  // BARIS DI BAWAH INI KITA HAPUS/KOMENTAR KARENA TEKS SEKARANG DIATUR OTOMATIS
-  // if (btnAll) btnAll.textContent = 'Semua Hasil'; 
   
   if (btnImg) btnImg.textContent = 'Memiliki Gambar';
   if (btnArt) btnArt.textContent = 'Memiliki Artikel';
 
   let searchInput = document.getElementById('search-input');
   if (searchInput) {
-    // Tulis angka yang dikirimkan ke kotak pencarian
     searchInput.placeholder = `Menampilkan ${totalValidRecords} hasil (atau ketik yang ingin dicari)`;
   }
 }
 
-// Gantilah seluruh fungsi applyIntersectionFilter lama Anda dengan ini:
 function applyIntersectionFilter(preventZoom = false) {
   Cluster.clearLayers();
   let ol = document.getElementById('index-list');
@@ -550,22 +497,17 @@ function applyIntersectionFilter(preventZoom = false) {
 
   let validMarkers = [];
   
-  // === LOGIKA STATUS & TEKS TOMBOL RESET ===
   let btnAll = document.getElementById('btn-all');
   if (btnAll) {
     if (currentSearchQuery.trim() === '' && 
         currentRegionFilter === 'all' && 
         currentUsiaFilter === 'all' && 
         activeFeatures.size === 0) {
-      
       btnAll.classList.add('active');
-      btnAll.textContent = 'Semua Hasil'; // Teks saat bawaan
-      
+      btnAll.textContent = 'Semua Hasil'; 
     } else {
-      
       btnAll.classList.remove('active');
-      btnAll.textContent = 'Reset'; // Teks saat filter sedang dipakai
-      
+      btnAll.textContent = 'Reset'; 
     }
   }
 
@@ -573,31 +515,22 @@ function applyIntersectionFilter(preventZoom = false) {
     let matchRegion = (currentRegionFilter === 'all' || record.areaTags.has(currentRegionFilter));
     let matchFeature = true;
     
-    // Cek tombol fitur
     if (activeFeatures.size > 0) {
       if (activeFeatures.has('image') && !record.imageFilename) matchFeature = false;
       if (activeFeatures.has('article') && record.articleTitle === undefined) matchFeature = false;
     }
 
-// === Cek pencarian teks (Normalisasi Spasi, Strip, dan Apostrof) ===
     let matchSearch = true;
     if (currentSearchQuery.trim() !== '') {
-      
-      // 1. Buang semua spasi (\s), strip (-), dan tanda kutip tunggal (') dari kata kunci
       let cleanQuery = currentSearchQuery.replace(/[-'\s]/g, '');
-      
       if (record.indexTitle) {
-        // 2. Buang juga karakter yang sama dari nama masjid di database
         let cleanTitle = record.indexTitle.toLowerCase().replace(/[-'\s]/g, '');
-        
-        // 3. Cocokkan keduanya dalam versi yang sudah "bersih"
         matchSearch = cleanTitle.includes(cleanQuery);
       } else {
         matchSearch = false;
       }
     }
 
-    // === Cek Filter Usia / Klaster ===
     let matchUsia = true;
     if (currentUsiaFilter === 'klaster_penting') {
       matchUsia = record.masukKlasterPenting === true;
@@ -612,50 +545,35 @@ function applyIntersectionFilter(preventZoom = false) {
       }
     }
     
-    // === TAMBALAN UTAMA 1: BARIS INI YANG SEBELUMNYA HILANG ===
     return matchRegion && matchFeature && matchSearch && matchUsia;
 
-}).sort((a, b) => {
-    
-    // === KODE BARU: Pengurutan Khusus untuk Opsi > 50 Tahun ===
-    // Jika dropdown disetel ke filter usia 50 tahun, urutkan dari yang paling tua
+  }).sort((a, b) => {
     if (currentUsiaFilter === 'usia_50') {
       let aHasYear = !!a.rawTahunBerdiri;
       let bHasYear = !!b.rawTahunBerdiri;
 
       if (aHasYear && bHasYear) {
-        // String ISO ("1800", "1920") bisa langsung dibandingkan.
-        // localeCompare akan menaruh angka terkecil (tahun tertua) di urutan atas.
         return a.rawTahunBerdiri.localeCompare(b.rawTahunBerdiri);
       } else if (aHasYear && !bHasYear) {
-        return -1; // Prioritaskan yang punya data tahun di atas
+        return -1; 
       } else if (!aHasYear && bHasYear) {
-        return 1;  // Singkirkan yang tidak punya data tahun ke bawah
+        return 1;  
       }
     }
-    // ==========================================================
-
-    // DEFAULT: Logika Pengurutan Abjad 
-    // (Akan otomatis berjalan jika memilih [Pilih] atau [Masjid Besar])
     return a.indexTitle.localeCompare(b.indexTitle);    
-    
   });
 
-// 1. Simpan hasil filter ke variabel global untuk dicicil
   currentFilteredRecords = validRecords;
-  currentRenderIndex = 0; // Reset index setiap kali filter berubah
+  currentRenderIndex = 0; 
 
-  // 2. Loop hanya untuk mengumpulkan marker peta (tidak merender list)
   validRecords.forEach(record => {
     if (record.mapMarker) validMarkers.push(record.mapMarker);
   });
 
-  // 3. Panggil mesin pencetak cicilan untuk merender 35 list pertama
   renderNextChunk();
 
   if (validMarkers.length > 0) {
     Cluster.addLayers(validMarkers);
-    
     if (!preventZoom) {
       Map.fitBounds(Cluster.getBounds());
     }
@@ -665,18 +583,14 @@ function applyIntersectionFilter(preventZoom = false) {
 }
 
 function activateSite(qid) {
-  displayRecordDetails(qid); // Ini akan memicu generateRecordDetails dan memunculkan panel+placeholder
+  displayRecordDetails(qid); 
   
-  // === INI DIA PEMICUNYA (Fase 5) ===
-  // Kedua fungsi ini akan berlari secara asinkronus (bersamaan) 
-  // di latar belakang untuk mengisi placeholder yang kosong.
   populateImportantEventsData(qid);
   populateHistoricalImagesData(qid);
-  // =================================
 
   let record = Records[qid];
   if (record.isCompound) {
-    // Biarkan kosong sesuai kode aslimu
+    // Kosongkan
   }
   else if (record.mapMarker) {
     Cluster.zoomToShowLayer(
@@ -690,36 +604,26 @@ function activateSite(qid) {
 }
 
 function generateRecordDetails(qid) {
-  // --- BAGIAN INI JANGAN DIHAPUS ---
   let record = Records[qid];
   let titleHtml = `<h1>${record.title}</h1>`;
-
-let figureHtml = generateFigure(record.imageFilename, record.title);
+  let figureHtml = generateFigure(record.imageFilename, record.title);
 
   if (record.imageFilename) {
     figureHtml = figureHtml.replace('<figure class="', '<figure class="gambar-utama ');
   }
 
-let articleHtml;
+  let articleHtml;
   if (record.articleTitle) {
     articleHtml = '<div class="article main-text loading"><div class="loader"></div></div>';
   } else {
     let namaAmanURL = encodeURIComponent(record.title);
     let gFormUrl = `https://docs.google.com/forms/d/e/1FAIpQLSeHMSn6cwcgbZ0xx1CJ5tGXDQacYgzRZUG51STByKUROWXgmg/viewform?usp=pp_url&entry.2138396049=${namaAmanURL}`;
-    
-    // Pastikan href langsung mengarah ke ${gFormUrl} dan ada target="_blank"
     articleHtml = `<div class="article main-text nodata"><p>Masjid ini belum memiliki artikel. <a href="${gFormUrl}" target="_blank" rel="noopener noreferrer" class="sunting-linktambah">Tambahkan!</a></p></div>`;
   }
   
-  // --- BARU MASUK KE KODE RINGKASAN YANG BARU ---
-let wikiUrlUtama = `https://www.wikidata.org/wiki/${qid}`;
+  let wikiUrlUtama = `https://www.wikidata.org/wiki/${qid}`;
   let tautanSuntingRingkasan = `<a href="${wikiUrlUtama}" target="_blank" class="sunting-link" title="Sunting data di Wikidata" aria-label="Sunting data di Wikidata"></a>`;
 
-  // =========================================================
-  // 2. LOGIKA PENENTUAN JUDUL DINAMIS
-  // =========================================================
-  
-  // A. Cek Kriteria 50 Tahun (Bersejarah)
   let isBersejarah = false;
   if (record.rawTahunBerdiri) {
     let tahunBangunan = parseInt(record.rawTahunBerdiri.substring(0, 4));
@@ -729,13 +633,8 @@ let wikiUrlUtama = `https://www.wikidata.org/wiki/${qid}`;
     }
   }
 
-  // B. Cek Kriteria Masjid Besar
-  // Silakan ganti 'record.masukKlasterPenting' jika penanda di data Anda berbeda.
-  // Contoh alternatif jika dari nama: let isMasjidBesar = record.title.toLowerCase().includes('besar');
   let isMasjidBesar = (record.masukKlasterPenting === true); 
-
-  // C. Tentukan Teks Akhir Berdasarkan Kombinasi
-  let teksJudul = 'Informasi'; // Nilai bawaan jika tidak memenuhi keduanya
+  let teksJudul = 'Informasi'; 
   
   if (isBersejarah && isMasjidBesar) {
     teksJudul = 'Masjid Besar dan Bersejarah';
@@ -748,27 +647,23 @@ let wikiUrlUtama = `https://www.wikidata.org/wiki/${qid}`;
   let designationsHtml = `<h2 style="margin-top:10px">${teksJudul} ${tautanSuntingRingkasan}</h2>`;
   designationsHtml += '<ul class="designations">';
 
-  let isFirstDesignation = true; // Mencegah duplikasi container peristiwa
+  let isFirstDesignation = true; 
 
-Object.keys(record.designations)
-  .map(id => [id, DESIGNATION_TYPES[id].order]) 
-  .sort((a, b) => a[1] - b[1])
-  .map(item => item[0])
-  .forEach(designationQid => {
+  // ============================================================
+  // KODE BARU: CETAK LOKASI BERDASARKAN PROVINSI
+  // ============================================================
+  Object.keys(record.designations).forEach(provQid => {
 
-    let type = DESIGNATION_TYPES[designationQid];
-
+    let namaProvinsi = record.designations[provQid];
     let infoTahunHtml = '';
     
-    // Teks tahun berdiri sudah bersih dari ikon sunting
     if (record.tahunBerdiri) {
       infoTahunHtml = `<p>Didirikan: ${record.tahunBerdiri}</p>`;
     } else {
       infoTahunHtml = `<p>Didirikan: <span style="font-style: italic; color: #888;">Data belum tersedia</span></p>`;
     }
 
-    // --- LOGIKA LOKASI ANTI-DOBEL ---
-    let induk = type.name; 
+    let induk = namaProvinsi; 
     let spesifik = record.lokasiSpesifik; 
     let namaLokasi = induk; 
 
@@ -785,7 +680,6 @@ Object.keys(record.designations)
       infoLokasiHtml = `<p class="koordinat-link">Terletak di: ${namaLokasi}</p>`;
     }
     
-    // --- LOADER VISUAL ---
     let eventsHtmlPlaceholder = '';
     if (isFirstDesignation) {
       eventsHtmlPlaceholder = `
@@ -801,14 +695,11 @@ Object.keys(record.designations)
         infoTahunHtml +
         eventsHtmlPlaceholder + 
       '</li>';
-      
-});
+        
+  });
     
   designationsHtml += '</ul>';
 
-  // ====================================================================
-  // PLACEHOLDER ARSIP
-  // ====================================================================
   let arsipHtml = `<div id="arsip-container-${qid}" class="loading"><div class="loader" style="width: 20px; height: 20px; border-width: 2px; margin: 0;"></div></div>`;
 
   let panelElem = document.createElement('div');
@@ -828,21 +719,16 @@ Object.keys(record.designations)
   queryOsm(qid);
 }
 
-// ====================================================================
-// FUNGSI JARING 4: Mengambil Arsip Foto & Keterangan Saat Diklik
-// ====================================================================
 function populateHistoricalImagesData(qid) {
   let record = Records[qid];
   let queryStr = getSparqlQuery5(qid); 
 
-  // Bersihkan memori setiap kali diklik agar tidak menumpuk ganda
   record.vicinityImages = [];
   record.pastImage = undefined;
 
   return queryWdqsThenProcess(
     queryStr,
     function(result) {
-      // 1. Ambil gambar lingkungan (Bisa Banyak)
       if ('vicinityImage' in result) {
         let filename = extractImageFilename(result.vicinityImage);
         let captionText = result.vicinityCaption ? result.vicinityCaption.value : '';
@@ -853,9 +739,8 @@ function populateHistoricalImagesData(qid) {
         }
       }
       
-      // 2. Ambil gambar masa lalu (Hanya 1)
       if ('pastImage' in result) {
-        if (!record.pastImage) { // Palang pintu: hanya ambil jika belum ada
+        if (!record.pastImage) { 
           let filename = extractImageFilename(result.pastImage);
           let captionText = result.pastCaption ? result.pastCaption.value : '';
           record.pastImage = { file: filename, caption: captionText };
@@ -868,9 +753,6 @@ function populateHistoricalImagesData(qid) {
   );
 }
 
-// ====================================================================
-// FUNGSI RENDER: Menyuntikkan Arsip Foto & Keterangan
-// ====================================================================
 function renderHistoricalImagesInPanel(qid) {
   let record = Records[qid];
   
@@ -880,47 +762,32 @@ function renderHistoricalImagesInPanel(qid) {
 
   let html = '';
   
-  // Mesin pembuat blok HTML
   function buildImageBlock(imgObj) {
     let block = '<div class="arsip-block" style="overflow: hidden;">';
-    
-    // Cetak fotonya terlebih dahulu
     block += generateFigure(imgObj.file);
-    
-    // Cetak teks keterangannya di bawah foto
     if (imgObj.caption && imgObj.caption.trim() !== '') {
       block += `<div class="article main-text"><p>${imgObj.caption}</p></div>`;
     } else {
       block += `<div class="article main-text nodata"><p>Belum ada keterangan foto di Wikidata.</p></div>`;
     }
-    
-    // Tutup bungkus div
     block += '</div>';
-    
     return block;
   }
 
-  // 1. Cetak SATU gambar masa lalu
   if (record.pastImage) {
     html += buildImageBlock(record.pastImage);
   }
   
-  // 2. Cetak BANYAK gambar lingkungan
   if (record.vicinityImages && record.vicinityImages.length > 0) {
     record.vicinityImages.forEach(imgObj => {
       html += buildImageBlock(imgObj);
     });
   }
 
-  // Finalisasi penempelan ke layar
   if (html !== '') {
-    // 3. Buat tautan sunting untuk Galeri dengan tambahan #P18
     let wikiUrlGaleri = `https://www.wikidata.org/wiki/${qid}#P18`;
     let tautanSuntingGaleri = `<a href="${wikiUrlGaleri}" target="_blank" class="sunting-link" title="Sunting data galeri di Wikidata" aria-label="Sunting data galeri di Wikidata"></a>`;
-    
-    // 4. Masukkan tautan sunting tersebut ke dalam tag <h2>
     container.innerHTML = `<h2 style="margin-bottom:15px;">Galeri ${tautanSuntingGaleri}</h2>` + html;
-    
     container.classList.remove('loading');
   } else {
     container.innerHTML = '';
@@ -928,6 +795,7 @@ function renderHistoricalImagesInPanel(qid) {
     container.style.display = 'none';
   }
 }
+
 function displayArticleExtract(title, elem) {
   loadJsonp(
     'https://id.wikipedia.org/w/api.php',
@@ -960,11 +828,9 @@ function renderNextChunk() {
   let ol = document.getElementById('index-list');
   if (!ol) return;
 
-  // Potong array dari titik terakhir, ambil 35 data ke depan
   let nextBatch = currentFilteredRecords.slice(currentRenderIndex, currentRenderIndex + CHUNK_SIZE);  
   if (nextBatch.length === 0) return;
   
-  // Gunakan DocumentFragment agar penambahan ke HTML lebih cepat dan tidak berkedip
   let fragment = document.createDocumentFragment();
 
   nextBatch.forEach(record => {
@@ -975,18 +841,15 @@ function renderNextChunk() {
   });
 
   ol.appendChild(fragment);
-  currentRenderIndex += CHUNK_SIZE; // Majukan kursor 35 langkah
+  currentRenderIndex += CHUNK_SIZE; 
 }
 
-// Pasang pendeteksi scroll pada kotak pembungkus list Anda
-// (Pastikan ID 'index-container' sesuai dengan ID div yang memiliki overflow-y: scroll di CSS/HTML Anda)
 let scrollContainer = document.getElementById('index-container'); 
 
 if (scrollContainer) {
   scrollContainer.addEventListener('scroll', function() {
-    // Jika posisi scroll pengguna sudah hampir menyentuh dasar kotak (tersisa 10px)
     if (this.scrollTop + this.clientHeight >= this.scrollHeight - 10) {
-      renderNextChunk(); // Cetak 35 data berikutnya
+      renderNextChunk(); 
     }
   });
 }
@@ -1026,8 +889,8 @@ function queryOsm(qid) {
     encodeURIComponent(
 `[out:json][timeout:25];
 (
-  way     ["wikidata"="${qid}"];
-  relation["wikidata"="${qid}"];
+  way      ["wikidata"="${qid}"];
+  relation ["wikidata"="${qid}"];
 );
 out body;
 >;
@@ -1041,14 +904,9 @@ out skel qt;`
 // ============================================================
 // CLASSES
 // ============================================================
-class Designation {
+class ProvinceIndexEntry {
   constructor() {
-    this.date             = undefined;
-  }
-}
-
-class DesignationIndexEntry {
-  constructor() {
+    this.name       = '';
     this.total      = 0;
     this.mapMarkers = [];
     this.indexLis   = [];
@@ -1057,29 +915,17 @@ class DesignationIndexEntry {
 
 class Record {
   constructor(isCompound) {
-
     this.isCompound = isCompound;
-
     this.title = undefined;
-
     this.imageFilename = '';
-
     this.articleTitle = undefined;
-
-    this.designations = {};
-
+    this.designations = {}; // Kini menyimpan ID Provinsi : Nama Provinsi
     this.panelElem = undefined;
-
     this.indexLi = undefined;
-
     this.tahunBerdiri = undefined;
-
     this.rawTahunBerdiri = undefined;
-
     this.events = [];
-
     this.areaTags = new Set();
-
     this.vicinityImages = [];
     this.masukKlasterPenting = false;
   }
