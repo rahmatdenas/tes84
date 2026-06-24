@@ -99,7 +99,12 @@ function doPreProcessing() {
 
 function populateProvinceTypesData() {
   let inputTxt = document.getElementById('jenis-input').value.trim();
-  let dynamicQuery = SPARQL_QUERY_0.replace('<PLACEHOLDER_JENIS>', inputTxt);
+  
+  // === WESEL PERCABANGAN: Cek apakah pencarian mengandung Surat Kabar atau Majalah ===
+  let isPers = inputTxt.includes('Q11032') || inputTxt.includes('Q41298');
+  let baseQuery = isPers ? SPARQL_QUERY_0_PERS : SPARQL_QUERY_0;
+  
+  let dynamicQuery = baseQuery.replace('<PLACEHOLDER_JENIS>', inputTxt);
 
   return queryWdqsThenProcess(
     dynamicQuery,
@@ -116,8 +121,6 @@ function populateProvinceTypesData() {
         record.title = '[ERROR: No title]';
       }
 
-      // === KUNCI PENGAMAN BUMPER PROVINSI ===
-      // Jika bangunan tidak punya data provinsi di Wikidata, masukkan ke "Provinsi Tidak Tercatat"
       let provQid = result.provinsiQid ? result.provinsiQid.value : 'Q_UNKNOWN';
       let provLabel = result.provinsiLabel ? result.provinsiLabel.value : 'Wilayah Tidak Tercatat';
 
@@ -153,21 +156,22 @@ function populateProvinceTypesData() {
 }
 
 function populateCoordinatesData() {
-  // 1. Ambil semua kunci QID dari hasil Kueri 0
   let daftarQid = Object.keys(Records).map(id => 'wd:' + id);
   if (daftarQid.length === 0) return Promise.resolve();
 
-  // 2. Belah array QID menjadi kelompok berisi maksimal 1000 data
+  // === WESEL PERCABANGAN KOORDINAT ===
+  let inputTxt = document.getElementById('jenis-input').value.trim();
+  let isPers = inputTxt.includes('Q11032') || inputTxt.includes('Q41298');
+  let templateKueri = isPers ? SPARQL_QUERY_1_PERS_TEMPLATE : SPARQL_QUERY_1_TEMPLATE;
+
   let kelompokCicilan = potongJadiKelompok(daftarQid, 1000);
 
-  // 3. Tembak kueri secara paralel untuk setiap kelompok
   let daftarJanji = kelompokCicilan.map(cicilan => {
     let teksQids = cicilan.join(' ');
-    let kueriFinal = SPARQL_QUERY_1_TEMPLATE.replace('<PLACEHOLDER_QIDS>', teksQids);
+    let kueriFinal = templateKueri.replace('<PLACEHOLDER_QIDS>', teksQids);
 
     return queryWdqsThenProcess(
       kueriFinal,
-      // === INI ADALAH CALLBACK LAMA ANDA YANG DIMASUKKAN KE SINI ===
       function(result) {
         let record = Records[result.siteQid.value];
         if (!record) return; 
@@ -179,7 +183,6 @@ function populateCoordinatesData() {
     );
   });
 
-  // 4. Setelah SEMUA cicilan koordinat selesai, baru nyalakan penanda Bootstrap
   return Promise.all(daftarJanji).then(function() {
     BootstrapDataIsLoaded = true;
   });
