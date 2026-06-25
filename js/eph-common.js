@@ -25,6 +25,7 @@ var BootstrapDataIsLoaded = false;
 var PrimaryDataIsLoaded   = false;  
 
 // === PENANDA STATUS BARU ===
+var isAppInitialLoad      = true; // Tambahkan ini!
 var isFetching            = false; // Menandai apakah satpam sedang mencari data
 var activeXhrs            = [];
 
