@@ -149,7 +149,7 @@ const KUMPULAN_KUERI_0 = {
     BIND(SUBSTR(STR(?provinsi), 32) AS ?provinsiQid) .
     
     SERVICE wikibase:label { bd:serviceParam wikibase:language "id". }
-  }`
+  }`,
 'bahasa': `SELECT DISTINCT ?siteQid ?siteLabel ?provinsiQid ?provinsiLabel ?p131LokasiLabel ?tahunBerdiriMentah ?tahunPresisi
   WHERE {
     VALUES ?jenis { <PLACEHOLDER_JENIS> } 
@@ -258,7 +258,7 @@ const KUMPULAN_KUERI_1 = {
     ?coordStatement ps:P625 ?coord .
     FILTER NOT EXISTS { ?coordStatement pq:P518 ?x }
     BIND (SUBSTR(STR(?site), 32) AS ?siteQid) .
-  }`
+  }`,
   'bahasa': `SELECT DISTINCT ?siteQid ?coord WHERE {
     VALUES ?site { <PLACEHOLDER_QIDS> }
     ?site wdt:P276 ?lokasi .
