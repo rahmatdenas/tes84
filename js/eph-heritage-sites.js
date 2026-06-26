@@ -112,7 +112,7 @@ function tentukanKategoriKueri(inputTxt) {
   
   // === PERUBAHAN DI SINI ===
   // Kelompokkan semua yang memakai P2341 (Kuliner, Lukisan, Lontar)
-  const kelompokAsal = ['Q19861951', 'Q93184', 'Q1641020'];
+  const kelompokAsal = ['Q19861951', 'Q93184', 'Q1641020', 'Q87167', 'Q133492', 'Q11460', 'Q107357104', 'Q189819', 'Q36192', 'Q7944'];
   let isMemakaiAsal = kelompokAsal.some(qid => teks.includes(qid));
   if (isMemakaiAsal) return 'kuliner'; 
   // =========================
