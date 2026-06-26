@@ -159,22 +159,29 @@ function resetApp() {
 }
 
 function initMap() {
-  Map = new L.map('map', { zoomControl: false });
+  // 1. Matikan atribusi bawaan agar bisa kita pindahkan
+  Map = new L.map('map', { zoomControl: false, attributionControl: false });
   Map.fitBounds([[MAX_PH_LAT, MAX_PH_LON], [MIN_PH_LAT, MIN_PH_LON]]);
+
+  // 2. Tambahkan Atribusi di Kiri Atas (Dieksekusi paling pertama agar ada di posisi paling atas)
+  L.control.attribution({ position: 'topleft' }).addTo(Map);
 
   let cartoLayer = new L.tileLayer(CARTO_LAYER_URL, {
     attribution : CARTO_LAYER_ATTRIBUTION,
     maxZoom     : TILE_LAYER_MAX_ZOOM,
   }).addTo(Map);
+  
   let osmLayer = new L.tileLayer(OSM_LAYER_URL, {
     attribution : OSM_LAYER_ATTRIBUTION,
     maxZoom     : TILE_LAYER_MAX_ZOOM,
   });
+  
   let baseMaps = {
     'CARTO Voyager'       : cartoLayer,
     'OpenStreetMap Carto' : osmLayer,
   };
   
+  // 3. Tombol Layer otomatis akan ditambahkan di bawah teks atribusi
   L.control.layers(baseMaps, null, {position: 'topleft'}).addTo(Map);
   L.control.zoom({ position: 'bottomright' }).addTo(Map);
   L.control.locate({ position: 'bottomright', showCompass: false, strings: { title: "Tunjukkan lokasi saya" } }).addTo(Map);
