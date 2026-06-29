@@ -593,9 +593,10 @@ if (record.dynamicProps && Object.keys(record.dynamicProps).length > 0) {
         else if (key === 'ketinggian') {
         formattedValue = parseInt(rawValue).toLocaleString('id-ID') + " mdpl";
       }
-      else if (key === 'lamanResmi') {
-        formattedValue = `<a href="${rawValue}" target="_blank" rel="noopener noreferrer" style="word-break: break-all;">Kunjungi Situs Web</a>`;
-      }
+else if (key === 'lamanResmi') {
+  const displayUrl = rawValue.replace(/^https?:\/\/(www\.)?/, '');
+  formattedValue = `<p class="koordinat-link"><a href="${rawValue}" target="_blank" rel="noopener noreferrer" style="word-break: break-all;">${displayUrl}</a></p>`;
+}
       else if (key === 'tglTemu' || key === 'tglWafat') {
         let [waktu, presisi] = rawValue.split('|');
         formattedValue = formatWikidataDate(waktu, presisi);
