@@ -1,11 +1,10 @@
 // ============================================================
-// PENINGKATAN TAMPILAN PONSEL (Mobile Enhancements) - REVISI ANTI-GLITCH
+// PENINGKATAN TAMPILAN PONSEL (Mobile Enhancements) - REVISI DINAMIS & HEADER VISIBLE
 // ============================================================
 
 (function() {
 
   var MOBILE_QUERY   = '(max-width: 800px)';
-  var HANDLE_HEIGHT  = 56;   
   var DRAG_THRESHOLD = 5;    
 
   var panel, handle, handleLabel;
@@ -22,8 +21,19 @@
     return window.matchMedia(MOBILE_QUERY).matches;
   }
 
+  // KUNCI 1: Hitung dinamis tinggi Handle + Header Branding
+  function getVisibleTopHeight() {
+    var handleHeight = handle ? handle.offsetHeight : 30; // Tinggi aman bawaan jika belum terender
+    var headerElement = document.getElementById('branding');
+    var headerHeight = headerElement ? headerElement.offsetHeight : 0;
+    
+    // Total tinggi yang disisakan saat ditarik ke bawah
+    return handleHeight + headerHeight; 
+  }
+
   function collapsedTranslate() {
-    return Math.max(panel.offsetHeight - HANDLE_HEIGHT, 0);
+    // Kurangi total tinggi panel dengan area header+handle yang ingin disisakan
+    return Math.max(panel.offsetHeight - getVisibleTopHeight(), 0);
   }
 
   function clampY(y) {
@@ -35,11 +45,26 @@
     panel.style.transform = 'translateY(' + y + 'px)';
   }
 
-  function updateLabel(expanded) {
+  // KUNCI 2: Deteksi Hash URL untuk mengubah teks label secara dinamis
+function updateLabel(expanded) {
     if (!handleLabel) return;
+    
+    var hash = window.location.hash.replace('#', '');
+    var teksTarikNaik = 'Tarik naik untuk lihat Daftar'; // Teks bawaan (default)
+    
+    if (hash === '' || hash === 'landing') {
+      teksTarikNaik = 'Tarik naik untuk Mulai Menjelajah';
+    } else if (hash === 'about') {
+      teksTarikNaik = 'Tarik naik untuk lihat Tentang';
+    } else if (hash !== 'hasil') {
+      // Jika hash bukan kosong, bukan landing, bukan about, dan BUKAN hasil,
+      // maka dipastikan pengguna sedang membuka spesifik butir (Q-ID).
+      teksTarikNaik = 'Tarik naik untuk membaca detail';
+    }
+    
     handleLabel.textContent = expanded
       ? 'Tarik turun untuk lihat peta'
-      : 'Tarik naik untuk lihat daftar';
+      : teksTarikNaik;
   }
 
  window.setMobilePanelExpanded = function(expand, animate) {
@@ -52,7 +77,7 @@
       panel.classList.remove('eph-dragging'); 
     }
     
-    // 2. Terapkan perubahan posisi
+    // 2. Terapkan perubahan posisi dan perbarui label dinamis
     applyTransform(expand ? 0 : collapsedTranslate());
     updateLabel(expand);
     
@@ -128,11 +153,7 @@
 
     if (!moved) {
       if (isHandleTap) {
-        // === LOGIKA KLIK SUPER STABIL ===
-        // Deteksi pasti: Jika angka currentY kecil (<50), berarti panel sedang di ATAS.
         var isCurrentlyExpanded = currentY < 50;
-        
-        // Perintahkan panel melakukan kebalikannya (Tutup jika sedang Buka, Buka jika sedang Tutup)
         window.setMobilePanelExpanded(!isCurrentlyExpanded);
         panelMovedOrToggled = true; 
       }
@@ -183,12 +204,8 @@
     if (isMobile()) {
       if (!document.getElementById('panel-handle')) {
         buildHandle();
-        // Paksa panel buka PENUH saat pertama kali dimuat
         window.setMobilePanelExpanded(true, false);
       } else {
-        // === SENSOR ANTI-GLITCH ===
-        // Jangan pernah lipat panel secara diam-diam! 
-        // Biarkan panel tetap pada statusnya (Buka tetap Buka, Tutup tetap Tutup)
         var isCurrentlyExpanded = currentY < 50;
         window.setMobilePanelExpanded(isCurrentlyExpanded, false);
       }
@@ -222,14 +239,16 @@
         e.preventDefault();
       }
     });
-
-    if (window.Map) {
-      Map.on('popupopen', function() {
-        if (isMobile()) window.setMobilePanelExpanded(true);
-      });
-    }
   });
 
   window.addEventListener('resize', handleViewportChange);
+  
+  // Tangkap perubahan Hash (URL) dari Navigasi agar teks panel ikut terbarui meski sedang ditutup
+  window.addEventListener('hashchange', function() {
+     if (isMobile() && panel) {
+       var isCurrentlyExpanded = currentY < 50;
+       updateLabel(isCurrentlyExpanded);
+     }
+  });
 
 })();
