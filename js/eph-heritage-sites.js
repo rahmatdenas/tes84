@@ -245,7 +245,15 @@ function populateProvinceTypesData() {
   // 2. Render Loading
   let indexList = document.getElementById('index-list');
   if (indexList) {
-    indexList.innerHTML = `... (kode loading Anda) ...`;
+    indexList.innerHTML = `
+      <div style="padding: 40px 20px; text-align: center; line-height: 1.6;">
+        <h3 id="loading-text" style="margin-bottom: 10px; margin-top:0; color: #333;">
+          Sedang Menarik Data ${currentNamaKlaster} di ${currentNamaWilayah}...
+        </h3>
+        <p style="color: #666; font-size:14px; margin-bottom: 25px;">Mohon tunggu sebentar, Wikidata sedang mencari dan menyusun daftar entitas untuk Anda.</p>
+        <div class="loader" style="margin: 0 auto; width: 40px; height: 40px; border-width: 4px;"></div>
+      </div>
+    `;
   }
   
   // === LOGIKA PEMILIHAN TEMPLATE KUERI ===
