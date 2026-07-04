@@ -145,7 +145,7 @@ let searchInput = document.getElementById('search-input');
   let btnAll = document.getElementById('btn-all');
   if (btnAll) {
     btnAll.classList.add('active');
-    btnAll.textContent = 'Semua Hasil';
+    btnAll.textContent = 'Pilih Hasil';
   }
   document.querySelectorAll('.feat-btn:not(#btn-all)').forEach(b => {
     b.classList.remove('active');
