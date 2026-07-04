@@ -337,6 +337,7 @@ function(result) {
       let qid = result.SQ.value;
       if (!(qid in Records)) Records[qid] = new Record(false);
       let record = Records[qid];
+  record.id = qid;
 
       record.title = ('sLabel' in result && result.sLabel.value) ? result.sLabel.value : '[ERROR: No title]';
 
@@ -1011,27 +1012,6 @@ function applyIntersectionFilter(preventZoom = false) {
   }, 10);
 }
 
-function activateSite(qid) {
-  displayRecordDetails(qid); 
-  
-  populateImportantEventsData(qid);
-  populateHistoricalImagesData(qid);
-
-  let record = Records[qid];
-  if (record.isCompound) {
-    // Kosongkan
-  }
-  else if (record.mapMarker) {
-    Cluster.zoomToShowLayer(
-      record.mapMarker,
-      function() {
-        Map.setView([record.lat, record.lon], Map.getZoom());
-        if (!record.popup.isOpen()) record.mapMarker.openPopup();
-      },
-    );
-  }
-}
-
 function generateRecordDetails(qid) {
   let record = Records[qid];
   let titleHtml = `<h1>${record.title}</h1>`;
@@ -1382,21 +1362,25 @@ function queryOsm(qid) {
   let xhr = new XMLHttpRequest();
   xhr.onreadystatechange = function() {
     if (xhr.readyState !== xhr.DONE) return;
-    if (xhr.status === 200) {
+ if (xhr.status === 200) {
       let geoJson = osmtogeojson(JSON.parse(xhr.responseText));
       if (!geoJson || geoJson.features.length === 0) return;
       let shapeLayer = L.geoJSON(
         geoJson,
         {
-          style: {
-            color   : '#ff3333',
-            opacity : 0.7,
-            fill    : true,
-          },
+          style: { color: '#ff3333', opacity: 0.7, fill: true },
           filter: feature => feature.geometry.type !== 'Point',
         },
       );
       Records[qid].shapeLayer = shapeLayer;
+
+      // KUNCI PERBAIKAN: Pastikan halaman belum pindah sebelum menggambar
+      if (window.location.hash.replace('#', '') === qid) {
+        if (currentActiveShapeLayer) Map.removeLayer(currentActiveShapeLayer);
+        shapeLayer.addTo(Map);
+        currentActiveShapeLayer = shapeLayer;
+        Map.fitBounds(shapeLayer.getBounds());
+      }
       shapeLayer.addTo(Map);
 
       if (window.location.hash.replace('#', '') === qid) {
