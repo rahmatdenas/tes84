@@ -637,6 +637,7 @@ function populateImportantEventsData(qid) {
     // =========================================================
     console.warn("Gagal menarik data peristiwa historis (offline).", error);
     // Walaupun gagal, kita PAKSA panggil fungsi berikutnya agar rantai loading tidak macet
+    record._gagalOffline = true;
     populateStatusAndCapacityData(qid);
   });
 }
@@ -669,6 +670,7 @@ function populateStatusAndCapacityData(qid) {
     // Walaupun gagal, kita PAKSA panggil renderDynamicDataInPanel.
     // Fungsi render tersebut akan melihat datanya kosong, tidak mencetak apa-apa, 
     // tapi akan tetap menjalankan container.remove() untuk membunuh animasi loading!
+    record._gagalOffline = true;
     renderDynamicDataInPanel(qid);
   });
 }
@@ -1415,7 +1417,21 @@ function populateHistoricalImagesData(qid) {
     function() {
       renderHistoricalImagesInPanel(qid);
     }
-  );
+    ).catch(error => {
+    // =========================================================
+    // +++ JARING PENGAMAN UNTUK FOTO ARSIP +++
+    // =========================================================
+    console.warn("Gagal menarik foto arsip (offline).", error);
+    
+    let record = Records[qid];
+    record._gagalOffline = true; // Tandai cacat offline
+    
+    // Bunuh loader arsip secara paksa jika panelnya ada
+    if (record.panelElem) {
+      let arsipContainer = record.panelElem.querySelector(`#arsip-container-${qid}`);
+      if (arsipContainer) arsipContainer.remove(); 
+    }
+  });
 }
 
 function renderHistoricalImagesInPanel(qid) {
