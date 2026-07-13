@@ -891,41 +891,36 @@ function populateMapAndIndex() {
       // =======================================================
       // 2. KENDALI MANUAL MUTLAK SAAT MARKER DIKLIK
       // =======================================================
-      mapMarker.on('click', function() {
-        
-        // JIKA POPUP SUDAH TERBUKA (Ini pasti Klik Kedua)
-        if (this.isPopupOpen()) {
+mapMarker.on('click', function() {
+        // Jika Popup sedang buka (Klik 2, 4, 6 dst)
+        if (this.getPopup() && this.getPopup().isOpen()) {
+          // JANGAN TUTUP POPUP
+          // Langsung naikkan panel mobile
           if (typeof window.setMobilePanelExpanded === 'function') {
             window.setMobilePanelExpanded(true, true);
           }
         } 
-        
-        // JIKA POPUP BELUM TERBUKA (Ini pasti Klik Pertama)
+        // Jika Popup sedang tutup (Klik 1, 3, 5 dst)
         else {
           let rec = Records[qid];
           let html = rec.title;
           
-          // Rakit gambar SEKARANG (Pasti berhasil karena gambar sudah ditarik dari background)
           if (rec.imageFilename) {
             let encodedFilename = encodeURIComponent(rec.imageFilename);
             let imgUrl = `${COMMONS_WIKI_URL_PREF}Special:FilePath/${encodedFilename}?width=250`;
             html = `
-<div style="text-align:center; margin-top:17px;margin-bottom: 5px;">
-                <img src="${imgUrl}" 
-                     draggable="false" 
-                     style="pointer-events: none; -webkit-user-drag: none; -webkit-touch-callout: none; user-select: none; width:100%; min-width:90px; height:130px; object-fit:cover; border-radius:4px;" 
-                     alt="Thumbnail"
-                     onload="let p = Records['${qid}'].popup; if (p) p.update();">
-              </div>
-            ` + html;
+              <div style="text-align:center; margin-top:17px;margin-bottom: 5px;">
+                <img src="${imgUrl}" draggable="false" 
+                     style="pointer-events: none; -webkit-user-drag: none; width:100%; height:130px; object-fit:cover; border-radius:4px;" 
+                     alt="Thumbnail">
+              </div>` + html;
           }
 
-          // Pasang isi HTML-nya, ikat ke marker, dan BUKA!
+          // Kunci: Gunakan .setLatLng() dan .openOn(map) agar Leaflet 
+          // tidak menganggap ini sebagai proses Toggle standar
           popup.setContent(html);
-          this.bindPopup(popup).openPopup();
-
-          // KUNCI EMAS: Cabut kabel fungsi 'tutup otomatis' bawaan Leaflet agar tidak berkedip!
-          this.off('click', this.togglePopup, this);
+          popup.setLatLng(this.getLatLng());
+          popup.openOn(Map); 
         }
       });
       
