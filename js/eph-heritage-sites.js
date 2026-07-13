@@ -880,62 +880,55 @@ function populateMapAndIndex() {
       );
       record.mapMarker = mapMarker;
       
-mapMarker.bindPopup(record.title, { 
-        closeButton: false,
-        maxWidth: 200 
-      });
+
+// =======================================================
+      // 1. Buat popup kosongan (Jangan di-bind ke marker dulu)
+      // =======================================================
+      let popup = L.popup({ closeButton: false, maxWidth: 200 });
+      popup._qid = qid;
+      record.popup = popup;
 
       // =======================================================
-      // +++ RETAS REFLEKS BAWAAN LEAFLET (ANTI-BERKEDIP) +++
+      // 2. KENDALI MANUAL MUTLAK SAAT MARKER DIKLIK
       // =======================================================
-      // Kita timpa fungsi toggle bawaannya. Sekarang marker ini 
-      // HANYA akan membuka popup, dan menolak untuk menutupnya!
-mapMarker.togglePopup = function() {
-        if (!this.isPopupOpen()) {
+      mapMarker.on('click', function() {
+        
+        // JIKA POPUP SUDAH TERBUKA (Ini pasti Klik Kedua)
+        if (this.isPopupOpen()) {
+          if (typeof window.setMobilePanelExpanded === 'function') {
+            window.setMobilePanelExpanded(true, true);
+          }
+        } 
+        
+        // JIKA POPUP BELUM TERBUKA (Ini pasti Klik Pertama)
+        else {
+          let rec = Records[qid];
+          let html = rec.title;
           
-          // INJEKSI GAMBAR DI SINI SEBELUM POPUP MUNCUL DI LAYAR!
-          let popupQid = this.getPopup()._qid;
-          let dataRecord = Records[popupQid];
-
-          if (dataRecord.imageFilename && !this.getPopup()._hasImage) {
-            let encodedFilename = encodeURIComponent(dataRecord.imageFilename);
+          // Rakit gambar SEKARANG (Pasti berhasil karena gambar sudah ditarik dari background)
+          if (rec.imageFilename) {
+            let encodedFilename = encodeURIComponent(rec.imageFilename);
             let imgUrl = `${COMMONS_WIKI_URL_PREF}Special:FilePath/${encodedFilename}?width=250`;
-            let imgHtml = `
+            html = `
               <div style="text-align:center; margin-top:17px;margin-bottom: 5px;">
                 <img src="${imgUrl}" 
                      draggable="false" 
                      style="width:100%; min-width:90px; height:130px; object-fit:cover; border-radius:4px;" 
                      alt="Thumbnail"
-                     onload="let p = Records['${popupQid}'].popup; if (p && !p._sudahDiupdate) { p._sudahDiupdate = true; p.update(); }">
+                     onload="let p = Records['${qid}'].popup; if (p) p.update();">
               </div>
-            `;
-            this.getPopup().setContent(imgHtml + `${dataRecord.title}`);
-            this.getPopup()._hasImage = true; 
+            ` + html;
           }
 
-          // Setelah isi popup siap dan sempurna, baru kita buka!
-          this.openPopup();
-        }
-      };
+          // Pasang isi HTML-nya, ikat ke marker, dan BUKA!
+          popup.setContent(html);
+          this.bindPopup(popup).openPopup();
 
-      // 1. Rekam status TEPAT saat jari menyentuh marker
-      mapMarker.on('mousedown touchstart', function() {
-        this._bukaSaatDisentuh = this.isPopupOpen();
-      });
-
-      // 2. Eksekusi pemanggilan panel saat klik / ketukan selesai
-      mapMarker.on('click', function() {
-        if (this._bukaSaatDisentuh) {
-          // --- INI PASTI KLIK KEDUA (Popup sudah terbuka) ---
-          if (typeof window.setMobilePanelExpanded === 'function') {
-            window.setMobilePanelExpanded(true, true);
-          }
-          
-          // KITA TIDAK PERLU LAGI SETTIMEOUT DI SINI!
-          // Popup akan diam dengan tenang tanpa berkedip sedikitpun.
+          // KUNCI EMAS: Cabut kabel fungsi 'tutup otomatis' bawaan Leaflet agar tidak berkedip!
+          this.off('click', this.togglePopup, this);
         }
       });
-      // =======================================================
+      
           let popup = mapMarker.getPopup();
       popup._qid = qid;
       record.popup = popup;
