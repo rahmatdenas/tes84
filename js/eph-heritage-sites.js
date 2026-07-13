@@ -884,7 +884,7 @@ function populateMapAndIndex() {
 // =======================================================
       // 1. Buat popup kosongan (Jangan di-bind ke marker dulu)
       // =======================================================
-      let popup = L.popup({ closeButton: false, maxWidth: 200 });
+      let popup = L.popup({ closeButton: false, maxWidth: 200,offset: L.point(0, -30) });
       popup._qid = qid;
       record.popup = popup;
 
