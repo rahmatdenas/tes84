@@ -886,31 +886,54 @@ mapMarker.bindPopup(record.title, {
       });
 
       // =======================================================
-      // +++ LOGIKA KLIK KEDUA: SENSOR SENTUH KHUSUS MOBILE +++
+      // +++ RETAS REFLEKS BAWAAN LEAFLET (ANTI-BERKEDIP) +++
       // =======================================================
-      
-      // 1. Rekam status TEPAT saat jari menyentuh marker (touchstart untuk HP, mousedown untuk PC)
+      // Kita timpa fungsi toggle bawaannya. Sekarang marker ini 
+      // HANYA akan membuka popup, dan menolak untuk menutupnya!
+mapMarker.togglePopup = function() {
+        if (!this.isPopupOpen()) {
+          
+          // INJEKSI GAMBAR DI SINI SEBELUM POPUP MUNCUL DI LAYAR!
+          let popupQid = this.getPopup()._qid;
+          let dataRecord = Records[popupQid];
+
+          if (dataRecord.imageFilename && !this.getPopup()._hasImage) {
+            let encodedFilename = encodeURIComponent(dataRecord.imageFilename);
+            let imgUrl = `${COMMONS_WIKI_URL_PREF}Special:FilePath/${encodedFilename}?width=250`;
+            let imgHtml = `
+              <div style="text-align:center; margin-top:17px;margin-bottom: 5px;">
+                <img src="${imgUrl}" 
+                     draggable="false" 
+                     style="width:100%; min-width:90px; height:130px; object-fit:cover; border-radius:4px;" 
+                     alt="Thumbnail"
+                     onload="let p = Records['${popupQid}'].popup; if (p && !p._sudahDiupdate) { p._sudahDiupdate = true; p.update(); }">
+              </div>
+            `;
+            this.getPopup().setContent(imgHtml + `${dataRecord.title}`);
+            this.getPopup()._hasImage = true; 
+          }
+
+          // Setelah isi popup siap dan sempurna, baru kita buka!
+          this.openPopup();
+        }
+      };
+
+      // 1. Rekam status TEPAT saat jari menyentuh marker
       mapMarker.on('mousedown touchstart', function() {
         this._bukaSaatDisentuh = this.isPopupOpen();
       });
 
       // 2. Eksekusi pemanggilan panel saat klik / ketukan selesai
       mapMarker.on('click', function() {
-        
         if (this._bukaSaatDisentuh) {
           // --- INI PASTI KLIK KEDUA (Popup sudah terbuka) ---
-          
           if (typeof window.setMobilePanelExpanded === 'function') {
-            // Panggil fungsi asli Anda: expand = true, animate = true
             window.setMobilePanelExpanded(true, true);
           }
           
-          // Tahan popup agar tidak tertutup otomatis oleh Leaflet
-          setTimeout(() => { 
-            this.openPopup(); 
-          }, 10);
+          // KITA TIDAK PERLU LAGI SETTIMEOUT DI SINI!
+          // Popup akan diam dengan tenang tanpa berkedip sedikitpun.
         }
-        
       });
       // =======================================================
           let popup = mapMarker.getPopup();
