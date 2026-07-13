@@ -47,24 +47,7 @@ Map.on('popupopen', function(e) {
     let qid = e.popup._qid;
     let record = Records[qid];
     displayRecordDetails(qid);
-    // 2. INJEKSI GAMBAR POPUP
-    if (record.imageFilename && !e.popup._hasImage) {
-      
-      let encodedFilename = encodeURIComponent(record.imageFilename);
-      let imgUrl = `${COMMONS_WIKI_URL_PREF}Special:FilePath/${encodedFilename}?width=250`;
-let imgHtml = `
-<div style="text-align:center; margin-top:17px;margin-bottom: 5px;">
-              <img src="${imgUrl}" 
-                   draggable="false" 
-                   style="width:100%; min-width:90px; height:130px; object-fit:cover; border-radius:4px;" 
-                   alt="Thumbnail"
-                   onload="let p = Records['${qid}'].popup; if (p && !p._sudahDiupdate) { p._sudahDiupdate = true; p.update(); }">
-            </div>
-          `;
-      e.popup.setContent(imgHtml + `${record.title}`);
-      
-      e.popup._hasImage = true; 
-    }
+    // 2. INJEKSI GAMBAR POPUP SUDAH DIHAPUS
   });
   
   // Langsung proses status hash saat web dibuka tanpa memaksa tambah #landing
@@ -633,6 +616,7 @@ function processHashChange() {
 function activateMapMarker(qid) {
   let record = Records[qid];
   if (!record.mapMarker) return; 
+  if (record.popup.isOpen()) return;
 
   try {
     // =========================================================
