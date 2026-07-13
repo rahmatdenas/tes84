@@ -910,10 +910,10 @@ function populateMapAndIndex() {
             let encodedFilename = encodeURIComponent(rec.imageFilename);
             let imgUrl = `${COMMONS_WIKI_URL_PREF}Special:FilePath/${encodedFilename}?width=250`;
             html = `
-              <div style="text-align:center; margin-top:17px;margin-bottom: 5px;">
+<div style="text-align:center; margin-top:17px;margin-bottom: 5px;">
                 <img src="${imgUrl}" 
                      draggable="false" 
-                     style="width:100%; min-width:90px; height:130px; object-fit:cover; border-radius:4px;" 
+                     style="pointer-events: none; -webkit-user-drag: none; -webkit-touch-callout: none; user-select: none; width:100%; min-width:90px; height:130px; object-fit:cover; border-radius:4px;" 
                      alt="Thumbnail"
                      onload="let p = Records['${qid}'].popup; if (p) p.update();">
               </div>
