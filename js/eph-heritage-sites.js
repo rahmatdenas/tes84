@@ -929,9 +929,6 @@ function populateMapAndIndex() {
         }
       });
       
-          let popup = mapMarker.getPopup();
-      popup._qid = qid;
-      record.popup = popup;
       mapMarkers.push(mapMarker);
     }
     
